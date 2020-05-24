@@ -20,7 +20,6 @@ logging.basicConfig(level=verbose_level)
 def mtree_path(pkg, version):
     return '/'.join(['/var/lib/pacman/local', pkg + '-' + version, 'mtree'])
 
-
 def pkg_version(pkg):
     logging.info("Getting version for %s" % pkg)
     try:
@@ -45,3 +44,20 @@ if '__main__' == __name__:
     logging.debug("%s %s %s" % ( pkg, version, mpath ))
 
     mtree = Mtree(mpath)
+
+    print(type(mtree))
+
+    for entry in iter(mtree.objects):
+
+        entry.verify()
+
+#        if entry.attr['type'] == 'file':
+#            print(entry)
+#            abspath = entry.path.lstrip('.')
+#            if os.path.exists(abspath):
+#                print("Computed md5sum hash: {}".format(filehash(abspath,'md5')))
+#                print("Computed sha256 hash: {}".format(filehash(abspath,'sha256')))
+#
+
+
+
