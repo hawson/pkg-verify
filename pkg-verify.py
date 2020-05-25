@@ -49,5 +49,5 @@ if '__main__' == __name__:
 
     for entry in iter(mtree.objects):
 
-        entry.verify()
+        verified, failures = entry.verify()
 

@@ -50,7 +50,7 @@ def parse_mtree(mtree_file):
         path, attrstr = line.split(' ', maxsplit=1)
 
         # skip these
-        if path in ('./.BUILDINFO', './.PKGINFO'):
+        if path in ('./.BUILDINFO', './.PKGINFO', './.INSTALL'):
             continue
 
         # default type.
@@ -61,7 +61,7 @@ def parse_mtree(mtree_file):
             k,v = a.split('=')
             attribs[k] = v
 
-        T = Thing(path, attrs=attribs)
+        T = Thing(path, attrs=attribs, ignore_dir_mtime=True)
         objects.append(T)
         #print(T)
 
