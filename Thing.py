@@ -29,6 +29,16 @@ def filehash(file_to_hash, hashtype):
 
 class Thing:
 
+    file_types = {
+        'dir':    0o040000, # directory
+        'char':   0o020000, # character device
+        'block':  0o060000, # block device
+        'file':   0o100000, # regular file
+        'fifo':   0o010000, # fifo (named pipe)
+        'link':   0o120000, # symbolic link
+        'socket': 0o140000, # socket file
+    }
+
     def __init__(self, path=None, attrs=None, altroot=None):
 
         if altroot:
@@ -41,6 +51,13 @@ class Thing:
         if attrs is not None:
             for k,w in attrs.items():
                 self.attr[k] = w
+
+        try:
+            self.attr['type'] = Thing.file_types[self.attr['type']]
+
+        except KeyError:
+            logging.error("unknown type=%s in mtree file" % self.attr['type'])
+            sys.exit(1)
 
         # store mode as INTEGER.  We will compare/present as octal later
         self.attr['mode'] = int(self.attr['mode'], 8)
@@ -93,19 +110,19 @@ class Thing:
 
 
     def check_mode(self, livestat):
-        lmode = stat.S_IMODE(livestat.st_mode & 0o777)
-        lftype = stat.S_IFMT(livestat.st_mode & 0o77000)
+        lmode = stat.S_IMODE(livestat.st_mode & 0o007777)
+        lftype = stat.S_IFMT(livestat.st_mode & 0o170000)
 
-        mode = oct(self.attr['mode'])
+        mode = self.attr['mode']
         ftype = self.attr['type']
 
         logging.info("stat mode: %06s / %06s" % (lmode, self.attr['mode']))
         logging.info("stat type: %06s / %06s" % (lftype, ftype))
 
-        if mode == self.attr['mode'] & 0o777:
+        if mode == lmode:
             return True
 
-        logging.info('mode mismatch {} != {}'.format(self.attr['mode'], livestat.st_mode))
+        logging.info('mode mismatch {} != {}'.format(mode, lmode))
         return False
 
 

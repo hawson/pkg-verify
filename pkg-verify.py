@@ -51,13 +51,3 @@ if '__main__' == __name__:
 
         entry.verify()
 
-#        if entry.attr['type'] == 'file':
-#            print(entry)
-#            abspath = entry.path.lstrip('.')
-#            if os.path.exists(abspath):
-#                print("Computed md5sum hash: {}".format(filehash(abspath,'md5')))
-#                print("Computed sha256 hash: {}".format(filehash(abspath,'sha256')))
-#
-
-
-
