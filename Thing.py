@@ -4,30 +4,39 @@ import logging
 import hashlib
 import os
 import stat
+import sys
 
 
 def filehash(file_to_hash, hashtype):
+    '''Computes checksum on a file'''
 
     if hashtype in ('md5digest', 'md5', 'md5sum'):
         h = hashlib.md5()
     elif hashtype in ('sha256digest', 'sha256', 'sha256sum'):
         h = hashlib.sha256()
     else:
-        logging.error('Missing hash function %s' % hashtype)
+        logging.error('Missing hash function %s', hashtype)
         return None
 
-    BLOCKSIZE=2**13
-    with open(file_to_hash, 'rb') as f:
-        block = f.read(BLOCKSIZE)
-        while len(block) > 0:
-            h.update(block)
+    BLOCKSIZE = 2**13
+
+    try:
+        with open(file_to_hash, 'rb') as f:
             block = f.read(BLOCKSIZE)
+            while len(block) > 0:
+                h.update(block)
+                block = f.read(BLOCKSIZE)
+
+    except OSError as exc:
+        #logging.error("Failed opening %s: %s" %(file_to_hash, exc))
+        return None
+
 
     return h.hexdigest()
 
 
-
 class Thing:
+    '''Interpret and manage mtree infomration about files on the filesystem'''
 
     file_type = {
         'dir':    0o040000, # directory
@@ -51,25 +60,25 @@ class Thing:
         self.ignore_dir_mtime = ignore_dir_mtime
 
         if attrs is not None:
-            for k,w in attrs.items():
+            for k, w in attrs.items():
                 self.attr[k] = w
 
         try:
             self.attr['type'] = Thing.file_type[self.attr['type']]
 
         except KeyError:
-            logging.error("unknown type=%s in mtree file" % self.attr['type'])
+            logging.error("unknown type=%s in mtree file", self.attr['type'])
             sys.exit(1)
 
         # store mode as INTEGER.  We will compare/present as octal later
         self.attr['mode'] = int(self.attr['mode'], 8)
 
-        logging.info(self.attr)
+        logging.debug(self.attr)
 
 
     def __repr__(self):
         string = "\nPath: {}\n".format(self.path)
-        for a,v in self.attr.items():
+        for a, v in self.attr.items():
             string += "{}: {}\n".format(a, v)
 
         return string
@@ -79,7 +88,7 @@ class Thing:
     def check_hashes(self):
 
         mismatch = 0
-        for h in [ x for x in self.attr if str(x).endswith('digest') ]:
+        for h in [x for x in self.attr if str(x).endswith('digest')]:
             stored = self.attr[h]
             computed = filehash(self.path, h)
             logging.debug("Stored   {type}: {digest}".format(type=h, digest=stored))
@@ -96,14 +105,14 @@ class Thing:
     def check_uid(self):
         if self.osstat.st_uid == int(self.attr['uid']):
             return True
-        logging.info('UID mismatch {} != {}'.format(self.attr['uid'], stat.st_uid))
+        logging.debug('UID mismatch {} != {}'.format(self.attr['uid'], self.osstat.st_uid))
         return False
 
 
     def check_gid(self):
         if self.osstat.st_gid == int(self.attr['gid']):
             return True
-        logging.info('GID mismatch {} != {}'.format(self.attr['gid'], stat.st_gid))
+        logging.debug('GID mismatch {} != {}'.format(self.attr['gid'], self.osstat.st_gid))
         return False
 
 
@@ -113,7 +122,7 @@ class Thing:
 
         if self.osstat.st_mtime == float(self.attr['time']):
             return True
-        logging.info('mtime mismatch {} != {}'.format(self.attr['time'], self.osstat.st_mtime))
+        logging.debug('mtime mismatch {} != {}'.format(self.attr['time'], self.osstat.st_mtime))
         return False
 
 
@@ -124,13 +133,13 @@ class Thing:
         mode = self.attr['mode']
         ftype = self.attr['type']
 
-        logging.info("stat mode: %06s / %06s" % (lmode, self.attr['mode']))
-        logging.info("stat type: %06s / %06s" % (lftype, ftype))
+        logging.debug("stat mode: %06s / %06s", lmode, self.attr['mode'])
+        logging.debug("stat type: %06s / %06s", lftype, ftype)
 
         if mode == lmode:
             return True
 
-        logging.info('mode mismatch {} != {}'.format(mode, lmode))
+        logging.debug('mode mismatch {} != {}'.format(mode, lmode))
         return False
 
 
@@ -155,26 +164,10 @@ class Thing:
         if self.osstat.st_size == int(self.attr['size']):
             return True
 
-        logging.info('size mismatch {} != {}'.format(self.attr['size'], stat.st_size))
+        logging.debug('size mismatch {} != {}'.format(self.attr['size'], self.osstat.st_size))
         return False
 
 
-
-
-    def check_metadata(self):
-
-        mode = {}
-        result = True
-
-        logging.debug(self.osstat)
-        logging.debug(self.attr)
-        # Only check size and mtime on files
-        if self.attr['type'] == 'file' and os.path.isfile(self.path):
-            mode['size'] = self.check_size(live_statinfo)
-            mode['mtime'] = self.check_mtime(live_statinfo)
-
-
-        return result, mode
 
 
 # from RPM:
@@ -207,37 +200,37 @@ class Thing:
 
     def verify(self):
         '''Returns True if all metadata matches correctly, for certain definitions of "all".'''
-        logging.info("Verifying %s" % self.path)
+        logging.debug("Verifying %s", self.path)
 
 
         try:
-            self.osstat = os.lstat(self.path)
+            if os.path.exists(self.path):
+                self.osstat = os.lstat(self.path)
+            else:
+                return False, '---------     {}'.format(self.path)
 
         except OSError as exc:
-            logging.error("Failed to call lstat() on %s: %s" % (self.path, exc))
+            logging.error("Failed to call lstat() on %s: %s", self.path, exc)
             sys.exit(1)
 
 
-        self.failures.append( '.' if self.check_size() else 'S')   # size
-        self.failures.append( '.' if self.check_mode() else 'M')   # mode
-        self.failures.append( '.' if self.check_hashes() else '5') # digests
-        self.failures.append( '.' if self.check_device() else 'S')   # device major/minor (unused)
-        self.failures.append( '.' if self.check_link() else 'L')   # Link target mismatch
-        self.failures.append( '.' if self.check_uid() else 'U')   # user
-        self.failures.append( '.' if self.check_gid() else 'G')   # group
-        self.failures.append( '.' if self.check_mtime() else 'T')   # mtime
-        self.failures.append( '.' if self.check_capabilities() else 'P')   # capabilities (unused)
+        self.failures.append('.' if self.check_size() else 'S')         # size
+        self.failures.append('.' if self.check_mode() else 'M')         # mode
+        self.failures.append('.' if self.check_hashes() else '5')       # digests
+        self.failures.append('.' if self.check_device() else 'S')       # device major/minor (unused)
+        self.failures.append('.' if self.check_link() else 'L')         # Link target mismatch
+        self.failures.append('.' if self.check_uid() else 'U')          # user
+        self.failures.append('.' if self.check_gid() else 'G')          # group
+        self.failures.append('.' if self.check_mtime() else 'T')        # mtime
+        self.failures.append('.' if self.check_capabilities() else 'P') # capabilities (unused)
 
         if self.attr['type'] == 'file':
             if not self.check_hashes():
                 self.failures.append('checksums')
 
-        print("{}     {}".format(''.join(self.failures), self.path))
+        rc = max(self.failures) == '.'
 
-        if self.failures:
-            return False, self.failures
+        failure_str = "{}     {}".format(''.join(self.failures), self.path)
+        logging.debug(failure_str)
 
-        return True, self.failures
-
-
-
+        return rc, failure_str

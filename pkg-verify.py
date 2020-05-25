@@ -1,53 +1,72 @@
 #!/usr/bin/env python3
 
-import os
 import sys
 import argparse
-import re
 import subprocess
 import logging
-import gzip
 
 from Mtree import Mtree
-
-# always log WARN-ERR-CRIT
-args_verbose = 3
-verbose_level = (30 - args_verbose*10)
-logging.basicConfig(level=verbose_level)
-
 
 
 def mtree_path(pkg, version):
     return '/'.join(['/var/lib/pacman/local', pkg + '-' + version, 'mtree'])
 
 def pkg_version(pkg):
-    logging.info("Getting version for %s" % pkg)
+    logging.debug("Getting version for %s", pkg)
     try:
         cmd = ['/usr/bin/pacman', '-Q', pkg]
-        logging.debug("Running %s" % cmd)
+        logging.debug("Running %s", cmd)
         output = subprocess.run(cmd, stdout=subprocess.PIPE, check=False, encoding='utf-8').stdout.strip().split(' ')
 
-    except SubprocessErrror as exc:
-        logging.error("Failed to run %s: %s" % ( ' '.join(cmd), exc))
+    except SubprocessError as exc:
+        logging.error("Failed to run %s: %s", ' '.join(cmd), exc)
         sys.exit(1)
         
     return output
 
 
-if '__main__' == __name__:
+if __name__ == '__main__':
 
-    logging.info("Starting")
 
-    pkg, version = pkg_version(sys.argv[1])
-    mpath = mtree_path(pkg,version)
+    parser = argparse.ArgumentParser(description='''Verify pacman pacmages, including checksums.''')
+    parser.add_argument('-v', '--verbose', action='count', help='Be verbose (multiples okay)')
+    parser.add_argument('-R', '--altroot', action='store', help='set alternate root directory')
+    parser.add_argument('-T', '--check-dir-mtime', action='store', default=False, help='Check mtimes on directories (normally ignored)')
 
-    logging.debug("%s %s %s" % ( pkg, version, mpath ))
+    try:
+        parsed_options, remaining_args = parser.parse_known_args()
 
-    mtree = Mtree(mpath)
+    except SystemExit as exc:
+        print("Failed parsing arguments: %s" % exc)
+        sys.exit(2)
+        
 
-    print(type(mtree))
+    verbose_value = 0 if parsed_options.verbose is None else parsed_options.verbose
+    LOG_LEVEL = (30 - verbose_value * 10)
+    logging.basicConfig(format='%(asctime)-15s [%(levelname)s] %(message)s', level=LOG_LEVEL)
 
-    for entry in iter(mtree.objects):
 
-        verified, failures = entry.verify()
+    logging.debug("Starting")
 
+    RC = 0
+
+    for arg in remaining_args:
+        pkg, version = pkg_version(arg)
+        mpath = mtree_path(pkg, version)
+
+        logging.debug("%s %s %s", pkg, version, mpath)
+
+        mtree = Mtree(mpath)
+
+
+        for entry in iter(mtree.objects):
+
+            verified, failure_str = entry.verify()
+            if not verified:
+                RC = 1
+
+            if LOG_LEVEL < 30 or not failure_str.startswith('.........'):
+                print(failure_str)
+
+
+    sys.exit(RC)

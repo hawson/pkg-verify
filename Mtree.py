@@ -22,7 +22,7 @@ def parse_mtree(mtree_file):
 
         logging.debug(line.strip())
         line = re.sub(r'\s*#.*', '', line.strip())
-        
+
         if line == '':
             logging.debug('Empty line')
             continue
@@ -31,10 +31,9 @@ def parse_mtree(mtree_file):
         m = re.match(r'^/set\s+(.*)', line)
         if m:
             for a in re.split(r'\s+', m.group(1)):
-                k,v, = a.split('=')
+                k, v = a.split('=')
                 defaults[k] = v
-            print('new defaults:')
-            print(defaults)
+            logging.debug('new defaults: %s', str(defaults))
             continue
 
         # handle /unset
@@ -50,7 +49,7 @@ def parse_mtree(mtree_file):
         path, attrstr = line.split(' ', maxsplit=1)
 
         # skip these
-        if path in ('./.BUILDINFO', './.PKGINFO', './.INSTALL'):
+        if path in ('./.BUILDINFO', './.PKGINFO', './.INSTALL', './.CHANGELOG'):
             continue
 
         # default type.
@@ -58,7 +57,7 @@ def parse_mtree(mtree_file):
         attribs['type'] = 'file'
 
         for a in attrstr.split(' '):
-            k,v = a.split('=')
+            k, v = a.split('=')
             attribs[k] = v
 
         T = Thing(path, attrs=attribs, ignore_dir_mtime=True)
@@ -85,10 +84,9 @@ class Mtree():
 
     def __next__(self):
         if self.index > self.length:
-            return StopIteration
+            yield StopIteration
 
         result = self.objects[self.index]
         self.index += 1
         yield result
-        
 
