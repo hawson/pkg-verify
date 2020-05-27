@@ -8,7 +8,7 @@ import sys
 
 
 def filehash(file_to_hash, hashtype):
-    '''Computes checksum on a file'''
+    '''Computes checksum of a file'''
 
     if hashtype in ('md5digest', 'md5', 'md5sum'):
         h = hashlib.md5()
@@ -28,6 +28,8 @@ def filehash(file_to_hash, hashtype):
                 block = f.read(BLOCKSIZE)
 
     except OSError as exc:
+        # We don't actually care if a file can't be opened; that's
+        # probably a permissions error, and thus a valid falure mode
         #logging.error("Failed opening %s: %s" %(file_to_hash, exc))
         return None
 
@@ -48,6 +50,11 @@ class Thing:
         'socket': 0o140000, # socket file
     }
 
+    # invert
+    for k in list(file_type.keys()):
+        file_type[file_type[k]] = k
+
+
     def __init__(self, path=None, attrs=None, altroot=None, ignore_dir_mtime=False):
 
         if altroot:
@@ -57,6 +64,10 @@ class Thing:
 
         self.attr = {}
         self.failures = []
+
+        # directories often have mtimes update, outside of the control of a package
+        # and can cause a lot of noise in "popular" directories, like /usr/man/*
+        # so this option lets us ignore the mtime metdata data check.  The option
         self.ignore_dir_mtime = ignore_dir_mtime
 
         if attrs is not None:
@@ -70,7 +81,9 @@ class Thing:
             logging.error("unknown type=%s in mtree file", self.attr['type'])
             sys.exit(1)
 
-        # store mode as INTEGER.  We will compare/present as octal later
+        # store mode as INTEGER.  We will compare/present as octal later,
+        # this is done because ints are easier to push around than
+        # converting back and forth between string representation of octal numbers
         self.attr['mode'] = int(self.attr['mode'], 8)
 
         logging.debug(self.attr)
@@ -88,6 +101,8 @@ class Thing:
     def check_hashes(self):
 
         mismatch = 0
+
+        # check all of the digests, whatever they are
         for h in [x for x in self.attr if str(x).endswith('digest')]:
             stored = self.attr[h]
             computed = filehash(self.path, h)
@@ -117,6 +132,7 @@ class Thing:
 
 
     def check_mtime(self):
+        # we can ignore mtimes on directories, sometimes.
         if self.ignore_dir_mtime and self.attr['type'] == Thing.file_type['dir']:
             return True
 
@@ -133,13 +149,18 @@ class Thing:
         mode = self.attr['mode']
         ftype = self.attr['type']
 
-        logging.debug("stat mode: %06s / %06s", lmode, self.attr['mode'])
-        logging.debug("stat type: %06s / %06s", lftype, ftype)
+        logging.debug("stat mode: %06o / %06o", lmode, self.attr['mode'])
+        logging.debug("stat type: %06s / %-6s", Thing.file_type[lftype], Thing.file_type[ftype])
 
-        if mode == lmode:
+        if mode == lmode and ftype == lftype:
             return True
 
-        logging.debug('mode mismatch {} != {}'.format(mode, lmode))
+        if mode != lmode:
+            logging.debug('mode mismatch %4o != %4o', mode, lmode)
+
+        if ftype != lftype:
+            logging.debug('type mismatch {} != {}'.Thing.format(file_type[mode], Thing.file_type[lftype]))
+
         return False
 
 
@@ -231,6 +252,5 @@ class Thing:
         rc = max(self.failures) == '.'
 
         failure_str = "{}     {}".format(''.join(self.failures), self.path)
-        logging.debug(failure_str)
 
         return rc, failure_str

@@ -9,7 +9,7 @@ from Thing import Thing
 ##mtree
 #/set type=file uid=0 gid=0 mode=644
 #./.BUILDINFO time=1581622860.0 size=4891 md5digest=85c4a154d55cc9a3856d4e368b293259 sha256digest=9dfdeb2e1b67043e31d7855a37dfd00b8839dc9ca300b9273ce75429f04867bc
-#./.PKGINFO time=1581622860.0 size=584 md5digest=bf536e1ff9a04547133103de718d680f sha256digest=d09be33c9b92f8d9561f29db0b6d903040b6a5f53ea065dfd828ed035606adc4
+#./somefile time=1581622860.0 size=584 md5digest=bf536e1ff9a04547133103de718d680f sha256digest=d09be33c9b92f8d9561f29db0b6d903040b6a5f53ea065dfd828ed035606adc4
 
 def parse_mtree(mtree_file):
     gz = gzip.open(mtree_file, mode="rt", encoding='utf-8')
@@ -20,7 +20,8 @@ def parse_mtree(mtree_file):
     for line in gz:
 
 
-        logging.debug(line.strip())
+        # strip comments, etc
+        #logging.debug(line.strip())
         line = re.sub(r'\s*#.*', '', line.strip())
 
         if line == '':
@@ -45,24 +46,25 @@ def parse_mtree(mtree_file):
             continue
 
 
-        # "data" line....
+        # A "data" line has a path, followed by k=v pairs
         path, attrstr = line.split(' ', maxsplit=1)
 
         # skip these
         if path in ('./.BUILDINFO', './.PKGINFO', './.INSTALL', './.CHANGELOG'):
             continue
 
-        # default type.
+        # Set the current defaults, all of which can be overriden
+        # on a per-line basis.  Set the default type to be "file",
+        # as that is usually omitted, unless the entry isn't a file.
         attribs = dict(defaults)
         attribs['type'] = 'file'
 
+        # Add metadata
         for a in attrstr.split(' '):
             k, v = a.split('=')
             attribs[k] = v
 
-        T = Thing(path, attrs=attribs, ignore_dir_mtime=True)
-        objects.append(T)
-        #print(T)
+        objects.append(Thing(path, attrs=attribs, ignore_dir_mtime=True))
 
     return objects
 
