@@ -31,7 +31,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='''Verify pacman pacmages, including checksums.''')
     parser.add_argument('-v', '--verbose', action='count', help='Be verbose (multiples okay)')
     parser.add_argument('-R', '--altroot', action='store', help='set alternate root directory')
-    parser.add_argument('-T', '--check-dir-mtime', action='store', default=False, help='Check mtimes on directories (normally ignored)')
+    parser.add_argument('-T', '--check-dir-mtime', action='count', default=False, help='Check mtimes on directories (normally ignored)')
 
     try:
         parsed_options, remaining_args = parser.parse_known_args()
